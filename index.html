@@ -96,7 +96,7 @@ video.playsInline = true; video.muted = true; video.setAttribute('playsinline','
 const load = (k,d)=>{ try{ const v=localStorage.getItem('slim.'+k); return v===null?d:JSON.parse(v) }catch(e){ return d } };
 const save = (k,v)=>{ try{ localStorage.setItem('slim.'+k, JSON.stringify(v)) }catch(e){} };
 
-const N = 20;                        // 輪郭を動かす点の数
+const N = 24;                        // 輪郭を動かす点の数
 const pts = new Float32Array(N*4);   // x, y, vx, vy（横は縦横比で補正した座標）
 const S = {kg:load('kg',15), tan:load('tan',0), skin:load('skin',true), mirror:true, hold:false, split:0,
   face:false, facing:'user', lastSeen:0, skinC:[0.45,0.58],
@@ -120,7 +120,7 @@ void main(){
     vec2 r = q - C; r = vec2(cr*r.x + sr*r.y, -sr*r.x + cr*r.y);
     float vb = (0.35 + 0.65*smoothstep(eyeD-0.25*fw, chinD-0.05*fw, r.y))
              * smoothstep(eyeD-1.2*fw, eyeD-0.55*fw, r.y)
-             * (1.0 - 0.7*smoothstep(chinD+0.05*fw, chinD+0.6*fw, r.y));
+             * (1.0 - 0.6*smoothstep(chinD+0.35*fw, chinD+1.0*fw, r.y));   // あご下〜首も一緒に細く（段差を作らない）
     float tt = clamp(abs(r.x)/(fw*1.15), 0.0, 1.0);
     float bump = sin(3.14159*tt); bump *= bump;
     r.x += sign(r.x) * ks * fw * 0.45 * vb * bump;
@@ -244,6 +244,12 @@ function applyLm(L, now){
     const k=17+j;
     t[k*4]  = chin[0]+side[0]*ox*fw+down[0]*oy*fw; t[k*4+1]= chin[1]+side[1]*ox*fw+down[1]*oy*fw;
     t[k*4+2]= (side[0]*ox*0.8+down[0]*w)*amt;      t[k*4+3]= (side[1]*ox*0.8+down[1]*w)*amt;
+  });
+  // あご下のたるみ：フェイスラインの少し下を、内側＋上へ引き締める
+  [172,136,397,365].forEach((i,j)=>{
+    const p=Q(i); let ox=p[0]-ctr[0], oy=p[1]-ctr[1]; const n=Math.hypot(ox,oy)||1; ox/=n; oy/=n;
+    const k=20+j, px=p[0]+down[0]*0.13*fw, py=p[1]+down[1]*0.13*fw;
+    t[k*4]=px; t[k*4+1]=py; t[k*4+2]=(ox*0.9+down[0]*0.6)*amt; t[k*4+3]=(oy*0.9+down[1]*0.6)*amt;
   });
   // 日焼け・肌なめらか用のマスク：顔の輪郭＋首
   { const W=96, H=Math.round(96/asp); if(mcv.height!==H) mcv.height=H;
