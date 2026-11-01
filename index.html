@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>スリムミラー</title>
+<style>
+  :root{
+    --bg:#0e1013; --panel:rgba(20,23,28,.82); --line:rgba(255,255,255,.12);
+    --fg:#eef1f4; --muted:#9aa3ad; --accent:#5fd3b0; --warn:#f2b45a;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+    font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{max-width:100%;max-height:100%;display:block}
+  #start{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
+  #start h1{margin:0;font-size:28px;letter-spacing:.04em}
+  #start p{margin:0;color:var(--muted);line-height:1.7;max-width:34em}
+  button{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--accent);color:#06261d;border-color:var(--accent);font-weight:700;padding:14px 28px;font-size:17px}
+  button.on{border-color:var(--accent);color:var(--accent)}
+  #bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(760px,calc(100% - 32px));
+    background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+  .grp{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0}
+  .grp label{white-space:nowrap;color:var(--muted);font-size:13px}
+  input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+  .val{font-variant-numeric:tabular-nums;min-width:4.5em;text-align:right;font-weight:700}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  #chip{position:fixed;top:14px;left:14px;font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+  #chip.ok{color:var(--accent)} #chip.warn{color:var(--warn)}
+  #tag{position:fixed;top:14px;right:14px;font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line)}
+  #err{color:var(--warn)}
+  .row{display:flex;flex-wrap:wrap;gap:6px;width:100%;align-items:center}
+  .row .lbl{color:var(--muted);font-size:13px;width:3.2em}
+  .pill{padding:6px 10px;border-radius:999px;font-size:13px;font-variant-numeric:tabular-nums}
+  .pill.on{background:var(--accent);color:#06261d;border-color:var(--accent);font-weight:700}
+  .note{font-size:11px;color:var(--muted);width:100%}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div id="start">
+  <h1>スリムミラー</h1>
+  <p>カメラの映像をリアルタイムで細く見せます。<br>映像はこのPCの中だけで処理され、どこにも送信されません。</p>
+  <button class="primary" id="go">カメラをオンにする</button>
+  <p id="err"></p>
+</div>
+
+<div id="chip" hidden>体の位置を探しています…</div>
+<div id="tag" hidden>AFTER</div>
+
+<div id="bar" hidden>
+  <div class="row" id="kgRow"><span class="lbl">体重</span></div>
+  <div class="grp">
+    <label for="amt">微調整</label>
+    <input id="amt" type="range" min="0" max="30" step="1" value="10">
+    <span class="val" id="amtv"></span>
+  </div>
+  <div class="row" id="tanRow"><span class="lbl">日焼け</span></div>
+  <div class="note">※体重はあくまで見た目の目安です（体型や脂肪のつき方で実際とは変わります）</div>
+  <div class="grp">
+    <label for="split">比較線</label>
+    <input id="split" type="range" min="0" max="100" value="0">
+  </div>
+  <div class="btns">
+    <button id="hold" title="押している間だけ元の姿">元の姿</button>
+    <button id="mirror" class="on">鏡表示</button>
+    <button id="snap">撮影</button>
+  </div>
+</div>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const cv = $('#cv');
+const gl = cv.getContext('webgl', {preserveDrawingBuffer:true});
+const video = document.createElement('video');
+video.playsInline = true; video.muted = true; video.setAttribute('playsinline',''); video.setAttribute('muted','');
+
+const state = {tan:0, k:0, mirror:true, hold:false, split:0, cx:0.5, hw:0.22, found:false, lastSeen:0};
+
+// ---------- WebGL ----------
+const vs = `attribute vec2 p; varying vec2 uv;
+void main(){ uv = p*0.5+0.5; uv.y = 1.0-uv.y; gl_Position = vec4(p,0.,1.); }`;
+const fs = `precision mediump float; varying vec2 uv;
+uniform sampler2D tex; uniform float k, cx, W, mirror, split, hold, tan;
+void main(){
+  float dx = mirror>0.5 ? 1.0-uv.x : uv.x;          // 画面上の位置 -> 映像上の位置
+  float sx = dx;
+  bool before = hold>0.5 || uv.x < split;
+  if(!before){
+    float d = dx - cx; float a = abs(d);
+    float t = clamp(a / W, 0.0, 1.0);
+    float f = 1.0 + k*(1.0-t)*(1.0-t);               // 中心ほど外側をサンプル = 細く見える
+    sx = cx + d*f;
+  }
+  vec3 c = texture2D(tex, vec2(clamp(sx,0.,1.), uv.y)).rgb;
+  if(!before && tan>0.001){
+    // 肌色っぽい部分だけを判定（YCbCr）
+    float y  = dot(c, vec3(0.299,0.587,0.114));
+    float cb = 0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b);
+    float cr = 0.5 + ( 0.5*c.r - 0.418688*c.g - 0.081312*c.b);
+    float m = smoothstep(0.50,0.54,cr) * (1.0-smoothstep(0.69,0.73,cr))
+            * smoothstep(0.30,0.34,cb) * (1.0-smoothstep(0.52,0.56,cb))
+            * smoothstep(0.12,0.2,y);
+    vec3 tanned = c * vec3(0.80,0.63,0.47);            // 小麦色〜褐色へ
+    tanned = mix(vec3(dot(tanned,vec3(0.333))), tanned, 1.15); // 少し彩度アップ
+    c = mix(c, tanned, m*tan);
+  }
+  if(split>0.001 && abs(uv.x-split)<0.0015) c = vec3(1.0);
+  gl_FragColor = vec4(c,1.0);
+}`;
+function sh(t,src){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s}
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER,vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER,fs));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog,'p'); gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+for(const [a,b] of [[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D,a,b);
+const U = n => gl.getUniformLocation(prog,n);
+const u = {k:U('k'),cx:U('cx'),W:U('W'),mirror:U('mirror'),split:U('split'),hold:U('hold'),tan:U('tan')};
+
+// ---------- 体の追従（MediaPipe Pose） ----------
+let pose = null;
+async function loadPose(){
+  try{
+    const v = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const files = await v.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    pose = await v.PoseLandmarker.createFromOptions(files,{
+      baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate:'GPU'},
+      runningMode:'VIDEO', numPoses:1});
+  }catch(e){
+    console.warn(e);
+    setChip('自動追従なし（画面中央を細くします）','warn');
+  }
+}
+function setChip(t,cls){const c=$('#chip');c.hidden=false;c.textContent=t;c.className=cls||''}
+
+let lastTs = -1;
+function track(now){
+  if(!pose || video.readyState<2) return;
+  const ts = Math.round(now); if(ts<=lastTs) return; lastTs = ts;
+  let r; try{ r = pose.detectForVideo(video, ts) }catch(e){ return }
+  const L = r && r.landmarks && r.landmarks[0];
+  if(L){
+    const ids=[11,12,23,24].filter(i=>L[i] && (L[i].visibility??1)>0.3);
+    if(ids.length>=2){
+      const xs = ids.map(i=>L[i].x);
+      const c = xs.reduce((a,b)=>a+b,0)/xs.length;
+      const sw = Math.abs(L[11].x-L[12].x) || 0.2;
+      const hw = Math.min(0.48, Math.max(0.12, sw*1.35));
+      state.cx += (c-state.cx)*0.25; state.hw += (hw-state.hw)*0.15;
+      state.lastSeen = now;
+      if(!state.found){ state.found=true; setChip('体を追従中','ok'); }
+      return;
+    }
+  }
+  if(state.found && now-state.lastSeen>1500){ state.found=false; setChip('体の位置を探しています…'); }
+}
+
+// ---------- ループ ----------
+function frame(now){
+  if(video.readyState>=2){
+    if(cv.width!==video.videoWidth){ cv.width=video.videoWidth; cv.height=video.videoHeight; gl.viewport(0,0,cv.width,cv.height); }
+    track(now);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,video);
+    // 鏡表示では比較線の位置も画面基準のまま
+    gl.uniform1f(u.k,state.k); gl.uniform1f(u.cx,state.cx); gl.uniform1f(u.W,state.hw*2.2);
+    gl.uniform1f(u.mirror,state.mirror?1:0); gl.uniform1f(u.split,state.split); gl.uniform1f(u.hold,state.hold?1:0); gl.uniform1f(u.tan,state.tan);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- UI ----------
+// 体重 → 見た目の横幅（目安：1kgあたり約0.8%細く）
+function setAmt(){
+  const kg = +$('#amt').value;
+  const r = kg*0.008;
+  state.k = 1/(1-r) - 1;
+  $('#amtv').textContent = kg ? `−${kg}kg` : 'そのまま';
+  document.querySelectorAll('#kgRow .pill').forEach(b=>b.classList.toggle('on', +b.dataset.kg===kg));
+}
+for(const kg of [0,5,10,15,20,25,30]){
+  const b=document.createElement('button'); b.className='pill'; b.dataset.kg=kg;
+  b.textContent = kg? `−${kg}kg` : '今のまま';
+  b.addEventListener('click',()=>{ $('#amt').value=kg; setAmt(); });
+  $('#kgRow').appendChild(b);
+}
+$('#amt').addEventListener('input',setAmt); setAmt();
+for(const [name,v] of [['なし',0],['うっすら',0.35],['小麦色',0.65],['こんがり',1]]){
+  const b=document.createElement('button'); b.className='pill'+(v===0?' on':''); b.textContent=name;
+  b.addEventListener('click',()=>{ state.tan=v; document.querySelectorAll('#tanRow .pill').forEach(x=>x.classList.toggle('on',x===b)); });
+  $('#tanRow').appendChild(b);
+}
+$('#split').addEventListener('input',e=>{ state.split = +e.target.value/100; updTag(); });
+function updTag(){ const t=$('#tag'); t.textContent = state.hold?'BEFORE':(state.split>0?'左 BEFORE ／ 右 AFTER':'AFTER'); }
+const hold=$('#hold');
+const on=()=>{state.hold=true;hold.classList.add('on');updTag()}, off=()=>{state.hold=false;hold.classList.remove('on');updTag()};
+hold.addEventListener('pointerdown',on); window.addEventListener('pointerup',off); hold.addEventListener('pointerleave',off);
+hold.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter')on()}); hold.addEventListener('keyup',off);
+$('#mirror').addEventListener('click',e=>{state.mirror=!state.mirror;e.target.classList.toggle('on',state.mirror)});
+$('#snap').addEventListener('click',()=>{
+  const a=document.createElement('a'); const d=new Date();
+  a.download=`slim_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}.png`;
+  a.href=cv.toDataURL('image/png'); a.click();
+});
+
+$('#go').addEventListener('click',async()=>{
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'user'},audio:false});
+    video.srcObject = s; await video.play();
+    $('#start').hidden=true; $('#bar').hidden=false; $('#tag').hidden=false;
+    setChip('体の位置を探しています…');
+    requestAnimationFrame(frame);
+    loadPose();
+  }catch(e){
+    $('#err').textContent = 'カメラを開けませんでした。ブラウザのアドレスバー横のカメラ許可を確認して、もう一度押してください。（'+e.name+'）';
+  }
+});
+</script>
+</body>
+</html>
