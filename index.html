@@ -90,7 +90,7 @@ const S = {kg:10, tan:0, mirror:true, hold:false, split:0,
 const vs = `attribute vec2 p; varying vec2 uv;
 void main(){ uv = p*0.5+0.5; uv.y = 1.0-uv.y; gl_Position = vec4(p,0.,1.); }`;
 const fs = `precision highp float; varying vec2 uv;
-uniform sampler2D tex; uniform vec4 P[${N}];
+uniform sampler2D tex, mtex; uniform vec2 mpx; uniform vec4 P[${N}];
 uniform float asp, rad, mirror, split, hold, tan, face, cx, cy, fw;
 uniform vec2 skin; uniform vec4 E; uniform float erad, estr, ks, eyeY, chinY;
 vec2 cbcr(vec3 c){ return vec2(0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b), 0.5 + (0.5*c.r - 0.418688*c.g - 0.081312*c.b)); }
@@ -100,8 +100,11 @@ void main(){
   if(!before && face>0.5){
     vec2 q = vec2(s.x*asp, s.y), off = vec2(0.0); float ws = 0.0;
     // 頬〜あごの高さだけ、顔全体を横に少し細く
-    float vb = smoothstep(eyeY-0.05*fw, eyeY+0.25*fw, q.y) * (1.0 - smoothstep(chinY+0.15*fw, chinY+0.45*fw, q.y));
-    float dx = q.x - cx*asp; float tt = clamp(abs(dx)/(fw*1.0), 0.0, 1.0);
+    // 縦方向：おでこは少し、頬〜あごで一番、首にかけて弱く（段差が出ないようになめらかに）
+    float vb = (0.35 + 0.65*smoothstep(eyeY-0.25*fw, chinY-0.05*fw, q.y))
+             * smoothstep(eyeY-1.2*fw, eyeY-0.55*fw, q.y)
+             * (1.0 - 0.7*smoothstep(chinY+0.05*fw, chinY+0.6*fw, q.y));
+    float dx = q.x - cx*asp; float tt = clamp(abs(dx)/(fw*1.15), 0.0, 1.0);
     float bump = sin(3.14159*tt); bump *= bump;          // 中心（目鼻口）は動かさず、頬だけ内側へ
     q.x += sign(dx) * ks * fw * 0.45 * vb * bump;
     for(int i=0;i<${N};i++){
@@ -123,12 +126,17 @@ void main(){
     vec2 k = cbcr(c);
     float y = dot(c, vec3(0.299,0.587,0.114));
     float dist = length((k - skin)*vec2(1.0,1.3));
-    float m = (1.0 - smoothstep(0.05, 0.12, dist)) * smoothstep(0.05, 0.14, y);
-    if(face>0.5){   // 顔の楕円の中だけ（壁や服は変えない）
-      vec2 e = vec2((s.x - cx)*asp/(fw*0.62), (s.y - cy)/(fw*0.95));
-      m *= 1.0 - smoothstep(0.6, 1.05, length(e));
-    } else m = 0.0;
-    vec3 t = c * 0.80 * vec3(1.0, 0.92, 0.84);   // 暗く・少し黄みに
+    // 顔の輪郭と首の形に合わせたマスク（ぼかして境目をなくす）
+    float mk = 0.0;
+    for(int a=-2;a<=2;a++) for(int b=-2;b<=2;b++) mk += texture2D(mtex, s + vec2(float(a),float(b))*mpx).r;
+    mk /= 25.0;
+    float m = face>0.5 ? mk : 0.0;
+    m *= 1.0 - smoothstep(0.06, 0.14, dist);       // 服や髪には乗せない
+    // 日焼け：明るさを落として、黄み〜赤みを少し足す（オレンジにしない）
+    float L = dot(c, vec3(0.299,0.587,0.114));
+    vec3 t = c * vec3(0.84, 0.75, 0.66);
+    t = mix(t, t*t*1.25, 0.25);                     // 影を少し深く
+
     c = mix(c, t, m*tan);
   }
   if(split>0.001 && abs(uv.x-split)<0.0016) c = vec3(1.0);
@@ -144,13 +152,20 @@ const loc = gl.getAttribLocation(prog,'p'); gl.enableVertexAttribArray(loc);
 gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
 gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
 for(const [a,b] of [[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D,a,b);
+const mtex = gl.createTexture(); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mtex);
+for(const [a,b] of [[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D,a,b);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
+gl.activeTexture(gl.TEXTURE0);
+const mcv = document.createElement('canvas'); mcv.width=96; mcv.height=128; const mctx = mcv.getContext('2d');
+let maskDirty = false;
 const U = n => gl.getUniformLocation(prog,n);
-const u = Object.fromEntries(['P','asp','rad','mirror','split','hold','tan','face','cx','cy','fw','skin','E','erad','estr','ks','eyeY','chinY'].map(n=>[n,U(n)]));
+const u = Object.fromEntries(['mtex','mpx','P','asp','rad','mirror','split','hold','tan','face','cx','cy','fw','skin','E','erad','estr','ks','eyeY','chinY'].map(n=>[n,U(n)]));
 
 // ---------- 顔の輪郭（MediaPipe Face Landmarker） ----------
 // 頬〜フェイスライン〜あご先の点と、それぞれの引き締め強さ
-const CONTOUR = [[234,.15],[93,.45],[132,.85],[58,1],[172,1],[136,1],[150,.9],[176,.75],[152,.55],
-                 [400,.75],[379,.9],[365,1],[397,1],[288,1],[361,.85],[323,.45],[454,.15]];
+const CONTOUR = [[234,.3],[93,.5],[132,.75],[58,.9],[172,1],[136,1],[150,.9],[176,.7],[152,.5],
+                 [400,.7],[379,.9],[365,1],[397,1],[288,.9],[361,.75],[323,.5],[454,.3]];
+const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
 let faceLm = null;
 async function loadFace(){
   try{
@@ -182,7 +197,7 @@ function applyLm(L, now){
   const a=Q(234), b=Q(454), nose=Q(1), chin=Q(152);
   const fw = Math.hypot(a[0]-b[0], a[1]-b[1]);
   const c = [nose[0], nose[1] - 0.05*fw];
-  const amt = (S.kg/30) * 0.17 * fw;              // −30kgで顔幅の約20%ぶん輪郭を内側へ
+  const amt = (S.kg/30) * 0.10 * fw;              // −30kgで顔幅の約20%ぶん輪郭を内側へ
   const t = new Float32Array(N*4);
   CONTOUR.forEach(([i,w],k)=>{
     const p=Q(i); let nx=p[0]-c[0], ny=p[1]-c[1]; const n=Math.hypot(nx,ny)||1; nx/=n; ny/=n;
@@ -192,9 +207,18 @@ function applyLm(L, now){
   [[0,0.15,1.3],[-0.17,0.11,1.0],[0.17,0.11,1.0]].forEach(([ox,oy,w],j)=>{
     const k=17+j; t[k*4]=chin[0]+ox*fw; t[k*4+1]=chin[1]+oy*fw; t[k*4+2]=ox*amt*0.8; t[k*4+3]=amt*w;
   });
+  // 日焼け用マスク：顔の輪郭＋首
+  { const W=96, H=Math.round(96/asp); if(mcv.height!==H) mcv.height=H;
+    mctx.fillStyle='#000'; mctx.fillRect(0,0,W,H); mctx.fillStyle='#fff';
+    const X=x=>x/asp*W, Y=y=>y*H;
+    mctx.beginPath(); OVAL.forEach((i,k)=>{const p=Q(i); k?mctx.lineTo(X(p[0]),Y(p[1])):mctx.moveTo(X(p[0]),Y(p[1]));}); mctx.closePath(); mctx.fill();
+    const j1=Q(172), j2=Q(397), cxq=nose[0];
+    mctx.beginPath(); mctx.moveTo(X(j1[0]),Y(j1[1])); mctx.lineTo(X(j2[0]),Y(j2[1]));
+    mctx.lineTo(X(cxq+0.30*fw),Y(chin[1]+0.9*fw)); mctx.lineTo(X(cxq-0.30*fw),Y(chin[1]+0.9*fw)); mctx.closePath(); mctx.fill();
+    maskDirty = true; }
   const eyeL=[(Q(159)[0]+Q(145)[0])/2,(Q(159)[1]+Q(145)[1])/2], eyeR=[(Q(386)[0]+Q(374)[0])/2,(Q(386)[1]+Q(374)[1])/2];
-  eyes = {e:[eyeL[0],eyeL[1],eyeR[0],eyeR[1]], r: fw*0.13, s:(S.kg/30)*0.22};
-  target = {t, eyeY:(Q(159)[1]+Q(386)[1])/2, chinY:chin[1], r: fw*0.28, cx: nose[0]/asp, cy: (Q(10)[1]+chin[1])/2, fw};
+  eyes = {e:[eyeL[0],eyeL[1],eyeR[0],eyeR[1]], r: fw*0.13, s:(S.kg/30)*0.12};
+  target = {t, eyeY:(Q(159)[1]+Q(386)[1])/2, chinY:chin[1], r: fw*0.34, cx: nose[0]/asp, cy: (Q(10)[1]+chin[1])/2, fw};
   S.lastSeen = now;
   if(!S.face){ S.face=true; setChip('顔を追従中','ok'); }
   // 肌の色を頬とおでこから測る（日焼け用）
@@ -221,9 +245,11 @@ function frame(now){
       for(let i=0;i<N*4;i++) pts[i] += (target.t[i]-pts[i])*0.45;
       S.r += (target.r-S.r)*0.45; S.eyeY=target.eyeY; S.chinY=target.chinY; S.cx=target.cx; S.cy=target.cy; S.fw=target.fw;
     }
+    if(maskDirty){ gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,mcv); gl.activeTexture(gl.TEXTURE0); maskDirty=false; }
+    gl.uniform1i(u.mtex,1); gl.uniform2f(u.mpx, 1.5/mcv.width, 1.5/mcv.height);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
     if(eyes){ gl.uniform4fv(u.E, eyes.e); gl.uniform1f(u.erad, eyes.r); gl.uniform1f(u.estr, eyes.s); } else gl.uniform1f(u.estr, 0);
-    gl.uniform1f(u.ks, S.face ? (S.kg/30)*0.26 : 0); gl.uniform1f(u.eyeY, S.eyeY||0.4); gl.uniform1f(u.chinY, S.chinY||0.6);
+    gl.uniform1f(u.ks, S.face ? (S.kg/30)*0.20 : 0); gl.uniform1f(u.eyeY, S.eyeY||0.4); gl.uniform1f(u.chinY, S.chinY||0.6);
     gl.uniform4fv(u.P, pts); gl.uniform1f(u.asp, video.videoWidth/video.videoHeight);
     gl.uniform1f(u.rad, S.r); gl.uniform1f(u.face, S.face?1:0); gl.uniform1f(u.cx,S.cx); gl.uniform1f(u.cy,S.cy||0.5); gl.uniform1f(u.fw,S.fw);
     gl.uniform1f(u.mirror,S.mirror?1:0); gl.uniform1f(u.split,S.split); gl.uniform1f(u.hold,S.hold?1:0);
