@@ -6,7 +6,7 @@
 <title>スリムミラー</title>
 <style>
   :root{
-    --bg:#0e1013; --panel:rgba(20,23,28,.82); --line:rgba(255,255,255,.12);
+    --bg:#0e1013; --panel:rgba(20,23,28,.84); --line:rgba(255,255,255,.14);
     --fg:#eef1f4; --muted:#9aa3ad; --accent:#5fd3b0; --warn:#f2b45a;
     color-scheme:dark;
   }
@@ -14,38 +14,30 @@
   [hidden]{display:none!important}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
     font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif}
-  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #stage{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center}
   canvas{max-width:100%;max-height:100%;display:block}
   #start{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
   #start h1{margin:0;font-size:28px;letter-spacing:.04em}
   #start p{margin:0;color:var(--muted);line-height:1.7;max-width:34em}
-  button{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
-  button:hover{border-color:var(--accent)}
+  button{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer}
   button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   button.primary{background:var(--accent);color:#06261d;border-color:var(--accent);font-weight:700;padding:14px 28px;font-size:17px}
   button.on{border-color:var(--accent);color:var(--accent)}
-  #bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(760px,calc(100% - 32px));
-    background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;
-    padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
-  .grp{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0}
-  .grp label{white-space:nowrap;color:var(--muted);font-size:13px}
-  input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
-  .val{font-variant-numeric:tabular-nums;min-width:4.5em;text-align:right;font-weight:700}
-  .btns{display:flex;gap:8px;flex-wrap:wrap}
-  #chip{position:fixed;top:14px;left:14px;font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
-  #chip.ok{color:var(--accent)} #chip.warn{color:var(--warn)}
-  #tag{position:fixed;top:14px;right:14px;font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line)}
-  #err{color:var(--warn)}
+  #bar{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);width:min(760px,calc(100% - 16px));
+    background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;
+    padding:8px 10px;display:flex;flex-wrap:wrap;gap:7px 10px;align-items:center}
+  #bar.min .full{display:none!important}
   .row{display:flex;flex-wrap:wrap;gap:6px;width:100%;align-items:center}
-  .row .lbl{color:var(--muted);font-size:13px;width:3.2em}
-  .pill{padding:6px 10px;border-radius:999px;font-size:13px;font-variant-numeric:tabular-nums}
+  .lbl{color:var(--muted);font-size:12px;width:3.4em}
+  .pill{padding:5px 9px;border-radius:999px;font-size:13px;font-variant-numeric:tabular-nums}
   .pill.on{background:var(--accent);color:#06261d;border-color:var(--accent);font-weight:700}
-  .note{font-size:11px;color:var(--muted);width:100%}
-  @media (max-width:600px){
-    #bar{bottom:8px;padding:8px 10px;gap:6px 10px;width:calc(100% - 16px)}
-    .pill{padding:5px 8px;font-size:12px} button{padding:8px 10px}
-    .note{display:none} #tag{display:none}
-  }
+  input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+  .val{font-variant-numeric:tabular-nums;min-width:4em;text-align:right;font-weight:700}
+  .btns{display:flex;gap:6px;flex-wrap:wrap;width:100%}
+  .btns .sp{flex:1}
+  #chip{position:fixed;top:10px;left:10px;font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+  #chip.ok{color:var(--accent)} #chip.warn{color:var(--warn)}
+  #err{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -53,128 +45,171 @@
 
 <div id="start">
   <h1>スリムミラー</h1>
-  <p>カメラの映像をリアルタイムで細く見せます。<br>映像はこの端末の中だけで処理され、どこにも送信されません。</p>
+  <p>カメラに映った顔の輪郭を、リアルタイムで引き締めて見せます。<br>映像はこの端末の中だけで処理され、どこにも送信されません。</p>
   <button class="primary" id="go">カメラをオンにする</button>
   <p id="err"></p>
 </div>
 
-<div id="chip" hidden>体の位置を探しています…</div>
-<div id="tag" hidden>AFTER</div>
+<div id="chip" hidden>顔を探しています…</div>
 
 <div id="bar" hidden>
-  <div class="row" id="kgRow"><span class="lbl">体重</span></div>
-  <div class="grp">
-    <label for="amt">微調整</label>
+  <div class="row full" id="kgRow"><span class="lbl">体重</span></div>
+  <div class="row full">
+    <span class="lbl">微調整</span>
     <input id="amt" type="range" min="0" max="30" step="1" value="10">
     <span class="val" id="amtv"></span>
   </div>
-  <div class="row" id="tanRow"><span class="lbl">日焼け</span></div>
-  <div class="note">※体重はあくまで見た目の目安です（体型や脂肪のつき方で実際とは変わります）</div>
-  <div class="grp">
-    <label for="split">比較線</label>
+  <div class="row full" id="tanRow"><span class="lbl">日焼け</span></div>
+  <div class="row full">
+    <span class="lbl">比較線</span>
     <input id="split" type="range" min="0" max="100" value="0">
   </div>
   <div class="btns">
-    <button id="hold" title="押している間だけ元の姿">元の姿</button>
+    <button id="hold">押す間 元の顔</button>
     <button id="mirror" class="on">鏡表示</button>
     <button id="snap">撮影</button>
-    <button id="trk">体を追従</button>
+    <span class="sp"></span>
+    <button id="fold" aria-label="パネルを小さくする">▼</button>
   </div>
 </div>
 
 <script type="module">
 const $ = s => document.querySelector(s);
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints>1 && /Mac/.test(navigator.platform));
 const cv = $('#cv');
 const gl = cv.getContext('webgl', {preserveDrawingBuffer:true});
 const video = document.createElement('video');
 video.playsInline = true; video.muted = true; video.setAttribute('playsinline',''); video.setAttribute('muted','');
 
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints>1 && /Mac/.test(navigator.platform));
-const state = {tan:0, k:0, mirror:true, hold:false, split:0, cx:0.5, hw:0.22, found:false, lastSeen:0};
+const N = 20;                       // 輪郭を動かす点の数
+const pts = new Float32Array(N*4);  // x, y, vx, vy（映像座標・横は縦横比で補正）
+const S = {kg:10, tan:0, mirror:true, hold:false, split:0,
+  face:false, r:0.1, cx:0.5, fw:0.3, skin:[0.5,0.6], lastSeen:0};
 
 // ---------- WebGL ----------
 const vs = `attribute vec2 p; varying vec2 uv;
 void main(){ uv = p*0.5+0.5; uv.y = 1.0-uv.y; gl_Position = vec4(p,0.,1.); }`;
-const fs = `precision mediump float; varying vec2 uv;
-uniform sampler2D tex; uniform float k, cx, W, mirror, split, hold, tan;
+const fs = `precision highp float; varying vec2 uv;
+uniform sampler2D tex; uniform vec4 P[${N}];
+uniform float asp, rad, mirror, split, hold, tan, face, cx, cy, fw;
+uniform vec2 skin; uniform vec4 E; uniform float erad, estr, ks, eyeY, chinY;
+vec2 cbcr(vec3 c){ return vec2(0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b), 0.5 + (0.5*c.r - 0.418688*c.g - 0.081312*c.b)); }
 void main(){
-  float dx = mirror>0.5 ? 1.0-uv.x : uv.x;          // 画面上の位置 -> 映像上の位置
-  float sx = dx;
+  vec2 s = vec2(mirror>0.5 ? 1.0-uv.x : uv.x, uv.y);
   bool before = hold>0.5 || uv.x < split;
-  if(!before){
-    float d = dx - cx; float a = abs(d);
-    float t = clamp(a / W, 0.0, 1.0);
-    float f = 1.0 + k*(1.0-t)*(1.0-t);               // 中心ほど外側をサンプル = 細く見える
-    sx = cx + d*f;
+  if(!before && face>0.5){
+    vec2 q = vec2(s.x*asp, s.y), off = vec2(0.0); float ws = 0.0;
+    // 頬〜あごの高さだけ、顔全体を横に少し細く
+    float vb = smoothstep(eyeY-0.05*fw, eyeY+0.25*fw, q.y) * (1.0 - smoothstep(chinY+0.15*fw, chinY+0.45*fw, q.y));
+    float dx = q.x - cx*asp; float tt = clamp(abs(dx)/(fw*1.0), 0.0, 1.0);
+    float bump = sin(3.14159*tt); bump *= bump;          // 中心（目鼻口）は動かさず、頬だけ内側へ
+    q.x += sign(dx) * ks * fw * 0.45 * vb * bump;
+    for(int i=0;i<${N};i++){
+      vec2 d = q - P[i].xy;
+      float w = max(0.0, 1.0 - dot(d,d)/(rad*rad)); w *= w;
+      off += w*P[i].zw; ws += w;
+    }
+    q += off / max(1.0, ws);   // 重なった点で動きが足し算されすぎないように
+    // 目をほんの少し大きく（むくみが取れた感じ）
+    for(int j=0;j<2;j++){
+      vec2 ec = j==0 ? E.xy : E.zw;
+      vec2 d = q - ec; float w = max(0.0, 1.0 - dot(d,d)/(erad*erad)); w*=w;
+      q -= d * w * estr;
+    }
+    s = vec2(q.x/asp, q.y);
   }
-  vec3 c = texture2D(tex, vec2(clamp(sx,0.,1.), uv.y)).rgb;
+  vec3 c = texture2D(tex, clamp(s,0.0,1.0)).rgb;
   if(!before && tan>0.001){
-    // 肌色っぽい部分だけを判定（YCbCr）
-    float y  = dot(c, vec3(0.299,0.587,0.114));
-    float cb = 0.5 + (-0.168736*c.r - 0.331264*c.g + 0.5*c.b);
-    float cr = 0.5 + ( 0.5*c.r - 0.418688*c.g - 0.081312*c.b);
-    float m = smoothstep(0.50,0.54,cr) * (1.0-smoothstep(0.69,0.73,cr))
-            * smoothstep(0.30,0.34,cb) * (1.0-smoothstep(0.52,0.56,cb))
-            * smoothstep(0.12,0.2,y);
-    vec3 tanned = c * vec3(0.80,0.63,0.47);            // 小麦色〜褐色へ
-    tanned = mix(vec3(dot(tanned,vec3(0.333))), tanned, 1.15); // 少し彩度アップ
-    c = mix(c, tanned, m*tan);
+    vec2 k = cbcr(c);
+    float y = dot(c, vec3(0.299,0.587,0.114));
+    float dist = length((k - skin)*vec2(1.0,1.3));
+    float m = (1.0 - smoothstep(0.05, 0.12, dist)) * smoothstep(0.05, 0.14, y);
+    if(face>0.5){   // 顔の楕円の中だけ（壁や服は変えない）
+      vec2 e = vec2((s.x - cx)*asp/(fw*0.62), (s.y - cy)/(fw*0.95));
+      m *= 1.0 - smoothstep(0.6, 1.05, length(e));
+    } else m = 0.0;
+    vec3 t = c * 0.80 * vec3(1.0, 0.92, 0.84);   // 暗く・少し黄みに
+    c = mix(c, t, m*tan);
   }
-  if(split>0.001 && abs(uv.x-split)<0.0015) c = vec3(1.0);
+  if(split>0.001 && abs(uv.x-split)<0.0016) c = vec3(1.0);
   gl_FragColor = vec4(c,1.0);
 }`;
-function sh(t,src){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s}
+function sh(t,src){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(s));return s}
 const prog = gl.createProgram();
 gl.attachShader(prog, sh(gl.VERTEX_SHADER,vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER,fs));
 gl.linkProgram(prog); gl.useProgram(prog);
-const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
 const loc = gl.getAttribLocation(prog,'p'); gl.enableVertexAttribArray(loc);
 gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
-const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
 for(const [a,b] of [[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D,a,b);
 const U = n => gl.getUniformLocation(prog,n);
-const u = {k:U('k'),cx:U('cx'),W:U('W'),mirror:U('mirror'),split:U('split'),hold:U('hold'),tan:U('tan')};
+const u = Object.fromEntries(['P','asp','rad','mirror','split','hold','tan','face','cx','cy','fw','skin','E','erad','estr','ks','eyeY','chinY'].map(n=>[n,U(n)]));
 
-// ---------- 体の追従（MediaPipe Pose） ----------
-let pose = null;
-async function loadPose(){
+// ---------- 顔の輪郭（MediaPipe Face Landmarker） ----------
+// 頬〜フェイスライン〜あご先の点と、それぞれの引き締め強さ
+const CONTOUR = [[234,.15],[93,.45],[132,.85],[58,1],[172,1],[136,1],[150,.9],[176,.75],[152,.55],
+                 [400,.75],[379,.9],[365,1],[397,1],[288,1],[361,.85],[323,.45],[454,.15]];
+let faceLm = null;
+async function loadFace(){
   try{
     const v = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
     const files = await v.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
-    pose = await v.PoseLandmarker.createFromOptions(files,{
-      baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate: isMobile ? 'CPU' : 'GPU'},
-      runningMode:'VIDEO', numPoses:1});
-  }catch(e){
-    console.warn(e);
-    setChip('自動追従なし（画面中央を細くします）','warn');
-  }
+    faceLm = await v.FaceLandmarker.createFromOptions(files,{
+      baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate: isMobile ? 'CPU' : 'GPU'},
+      runningMode:'VIDEO', numFaces:1});
+    setChip('顔を探しています…');
+  }catch(e){ console.warn(e); setChip('顔の検出を読み込めませんでした。ネット接続を確認して開き直してください','warn'); }
 }
 function setChip(t,cls){const c=$('#chip');c.hidden=false;c.textContent=t;c.className=cls||''}
 
-let lastTs = -1, slowCount = 0;
-const TRACK_EVERY = isMobile ? 250 : 66;   // 携帯は4回/秒だけ体の位置を測る
+const sampler = document.createElement('canvas'); const sctx = sampler.getContext('2d',{willReadFrequently:true});
+let lastTs=-1, lastSkin=0, target=null, eyes=null;
+const EVERY = isMobile ? 90 : 40;
 function track(now){
-  if(!pose || !trackOn || video.readyState<2) return;
-  const ts = Math.round(now); if(ts-lastTs < TRACK_EVERY) return; lastTs = ts;
-  const t0 = performance.now();
-  let r; try{ r = pose.detectForVideo(video, ts) }catch(e){ return }
-  if(performance.now()-t0 > 120){ if(++slowCount>=3){ trackOn=false; updTrackBtn(); setChip('重いので追従を止めました（画面中央を細くします）','warn'); return; } } else slowCount=0;
-  const L = r && r.landmarks && r.landmarks[0];
-  if(L){
-    const ids=[11,12,23,24].filter(i=>L[i] && (L[i].visibility??1)>0.3);
-    if(ids.length>=2){
-      const xs = ids.map(i=>L[i].x);
-      const c = xs.reduce((a,b)=>a+b,0)/xs.length;
-      const sw = Math.abs(L[11].x-L[12].x) || 0.2;
-      const hw = Math.min(0.48, Math.max(0.12, sw*1.35));
-      state.cx += (c-state.cx)*0.25; state.hw += (hw-state.hw)*0.15;
-      state.lastSeen = now;
-      if(!state.found){ state.found=true; setChip('体を追従中','ok'); }
-      return;
+  if(!faceLm || video.readyState<2) return;
+  const ts=Math.round(now); if(ts-lastTs<EVERY) return; lastTs=ts;
+  let r; try{ r = faceLm.detectForVideo(video, ts) }catch(e){ return }
+  const L = r && r.faceLandmarks && r.faceLandmarks[0];
+  if(!L){ if(S.face && now-S.lastSeen>800){ S.face=false; target=null; setChip('顔を探しています…'); } return; }
+  applyLm(L, now);
+}
+function applyLm(L, now){
+  if(!video.videoWidth) return;
+  const asp = video.videoWidth/video.videoHeight;
+  const Q = i => [L[i].x*asp, L[i].y];
+  const a=Q(234), b=Q(454), nose=Q(1), chin=Q(152);
+  const fw = Math.hypot(a[0]-b[0], a[1]-b[1]);
+  const c = [nose[0], nose[1] - 0.05*fw];
+  const amt = (S.kg/30) * 0.17 * fw;              // −30kgで顔幅の約20%ぶん輪郭を内側へ
+  const t = new Float32Array(N*4);
+  CONTOUR.forEach(([i,w],k)=>{
+    const p=Q(i); let nx=p[0]-c[0], ny=p[1]-c[1]; const n=Math.hypot(nx,ny)||1; nx/=n; ny/=n;
+    t[k*4]=p[0]; t[k*4+1]=p[1]; t[k*4+2]=nx*amt*w; t[k*4+3]=ny*amt*w;
+  });
+  // 二重あご：あごの下のふくらみの下端を上へ引き上げる
+  [[0,0.15,1.3],[-0.17,0.11,1.0],[0.17,0.11,1.0]].forEach(([ox,oy,w],j)=>{
+    const k=17+j; t[k*4]=chin[0]+ox*fw; t[k*4+1]=chin[1]+oy*fw; t[k*4+2]=ox*amt*0.8; t[k*4+3]=amt*w;
+  });
+  const eyeL=[(Q(159)[0]+Q(145)[0])/2,(Q(159)[1]+Q(145)[1])/2], eyeR=[(Q(386)[0]+Q(374)[0])/2,(Q(386)[1]+Q(374)[1])/2];
+  eyes = {e:[eyeL[0],eyeL[1],eyeR[0],eyeR[1]], r: fw*0.13, s:(S.kg/30)*0.22};
+  target = {t, eyeY:(Q(159)[1]+Q(386)[1])/2, chinY:chin[1], r: fw*0.28, cx: nose[0]/asp, cy: (Q(10)[1]+chin[1])/2, fw};
+  S.lastSeen = now;
+  if(!S.face){ S.face=true; setChip('顔を追従中','ok'); }
+  // 肌の色を頬とおでこから測る（日焼け用）
+  if(now-lastSkin>600){
+    lastSkin=now; const W=160, H=Math.round(160/asp); sampler.width=W; sampler.height=H;
+    sctx.drawImage(video,0,0,W,H);
+    let cb=0,cr=0,n=0;
+    for(const i of [50,280,10,205,425]){
+      const x=Math.round(L[i].x*W), y=Math.round(L[i].y*H); if(x<1||y<1||x>=W-1||y>=H-1) continue;
+      const d=sctx.getImageData(x-1,y-1,3,3).data;
+      for(let j=0;j<d.length;j+=4){ const R=d[j]/255,G=d[j+1]/255,B=d[j+2]/255;
+        cb+=0.5+(-0.168736*R-0.331264*G+0.5*B); cr+=0.5+(0.5*R-0.418688*G-0.081312*B); n++; }
     }
+    if(n) S.skin=[cb/n, cr/n];
   }
-  if(state.found && now-state.lastSeen>1500){ state.found=false; setChip('体の位置を探しています…'); }
 }
 
 // ---------- ループ ----------
@@ -182,67 +217,63 @@ function frame(now){
   if(video.readyState>=2){
     if(cv.width!==video.videoWidth){ cv.width=video.videoWidth; cv.height=video.videoHeight; gl.viewport(0,0,cv.width,cv.height); }
     track(now);
+    if(target){                       // 点の動きをなめらかに
+      for(let i=0;i<N*4;i++) pts[i] += (target.t[i]-pts[i])*0.45;
+      S.r += (target.r-S.r)*0.45; S.eyeY=target.eyeY; S.chinY=target.chinY; S.cx=target.cx; S.cy=target.cy; S.fw=target.fw;
+    }
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
-    // 鏡表示では比較線の位置も画面基準のまま
-    gl.uniform1f(u.k,state.k); gl.uniform1f(u.cx,state.cx); gl.uniform1f(u.W,state.hw*2.2);
-    gl.uniform1f(u.mirror,state.mirror?1:0); gl.uniform1f(u.split,state.split); gl.uniform1f(u.hold,state.hold?1:0); gl.uniform1f(u.tan,state.tan);
+    if(eyes){ gl.uniform4fv(u.E, eyes.e); gl.uniform1f(u.erad, eyes.r); gl.uniform1f(u.estr, eyes.s); } else gl.uniform1f(u.estr, 0);
+    gl.uniform1f(u.ks, S.face ? (S.kg/30)*0.26 : 0); gl.uniform1f(u.eyeY, S.eyeY||0.4); gl.uniform1f(u.chinY, S.chinY||0.6);
+    gl.uniform4fv(u.P, pts); gl.uniform1f(u.asp, video.videoWidth/video.videoHeight);
+    gl.uniform1f(u.rad, S.r); gl.uniform1f(u.face, S.face?1:0); gl.uniform1f(u.cx,S.cx); gl.uniform1f(u.cy,S.cy||0.5); gl.uniform1f(u.fw,S.fw);
+    gl.uniform1f(u.mirror,S.mirror?1:0); gl.uniform1f(u.split,S.split); gl.uniform1f(u.hold,S.hold?1:0);
+    gl.uniform1f(u.tan,S.tan); gl.uniform2fv(u.skin,S.skin);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
   requestAnimationFrame(frame);
 }
 
 // ---------- UI ----------
-// 体重 → 見た目の横幅（目安：1kgあたり約0.8%細く）
 function setAmt(){
-  const kg = +$('#amt').value;
-  const r = kg*0.008;
-  state.k = 1/(1-r) - 1;
-  $('#amtv').textContent = kg ? `−${kg}kg` : 'そのまま';
-  document.querySelectorAll('#kgRow .pill').forEach(b=>b.classList.toggle('on', +b.dataset.kg===kg));
+  S.kg = +$('#amt').value;
+  $('#amtv').textContent = S.kg ? `−${S.kg}kg` : 'そのまま';
+  document.querySelectorAll('#kgRow .pill').forEach(b=>b.classList.toggle('on', +b.dataset.kg===S.kg));
 }
 for(const kg of [0,5,10,15,20,25,30]){
-  const b=document.createElement('button'); b.className='pill'; b.dataset.kg=kg;
-  b.textContent = kg? `−${kg}kg` : '今のまま';
-  b.addEventListener('click',()=>{ $('#amt').value=kg; setAmt(); });
-  $('#kgRow').appendChild(b);
+  const b=document.createElement('button'); b.className='pill'; b.dataset.kg=kg; b.textContent = kg?`−${kg}kg`:'今のまま';
+  b.addEventListener('click',()=>{ $('#amt').value=kg; setAmt(); }); $('#kgRow').appendChild(b);
 }
 $('#amt').addEventListener('input',setAmt); setAmt();
-for(const [name,v] of [['なし',0],['うっすら',0.35],['小麦色',0.65],['こんがり',1]]){
+for(const [name,v] of [['なし',0],['うっすら',0.4],['小麦色',0.7],['こんがり',1]]){
   const b=document.createElement('button'); b.className='pill'+(v===0?' on':''); b.textContent=name;
-  b.addEventListener('click',()=>{ state.tan=v; document.querySelectorAll('#tanRow .pill').forEach(x=>x.classList.toggle('on',x===b)); });
+  b.addEventListener('click',()=>{ S.tan=v; document.querySelectorAll('#tanRow .pill').forEach(x=>x.classList.toggle('on',x===b)); });
   $('#tanRow').appendChild(b);
 }
-$('#split').addEventListener('input',e=>{ state.split = +e.target.value/100; updTag(); });
-function updTag(){ const t=$('#tag'); t.textContent = state.hold?'BEFORE':(state.split>0?'左 BEFORE ／ 右 AFTER':'AFTER'); }
+$('#split').addEventListener('input',e=>{ S.split = +e.target.value/100; });
 const hold=$('#hold');
-const on=()=>{state.hold=true;hold.classList.add('on');updTag()}, off=()=>{state.hold=false;hold.classList.remove('on');updTag()};
-hold.addEventListener('pointerdown',on); window.addEventListener('pointerup',off); hold.addEventListener('pointerleave',off);
+const on=e=>{e&&e.preventDefault();S.hold=true;hold.classList.add('on')}, off=()=>{S.hold=false;hold.classList.remove('on')};
+hold.addEventListener('pointerdown',on); window.addEventListener('pointerup',off); hold.addEventListener('pointercancel',off);
 hold.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter')on()}); hold.addEventListener('keyup',off);
-$('#mirror').addEventListener('click',e=>{state.mirror=!state.mirror;e.target.classList.toggle('on',state.mirror)});
+$('#mirror').addEventListener('click',e=>{S.mirror=!S.mirror;e.target.classList.toggle('on',S.mirror)});
+$('#fold').addEventListener('click',e=>{ const m=$('#bar').classList.toggle('min'); e.target.textContent=m?'▲':'▼'; });
 $('#snap').addEventListener('click',()=>{
-  const a=document.createElement('a'); const d=new Date();
-  a.download=`slim_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}.png`;
+  const a=document.createElement('a'); const d=new Date(), p=n=>String(n).padStart(2,'0');
+  a.download=`slim_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.png`;
   a.href=cv.toDataURL('image/png'); a.click();
 });
 
-let trackOn = !isMobile;   // 携帯は最初オフ（重いため）。ボタンでオン
-function updTrackBtn(){ $('#trk').classList.toggle('on',trackOn); $('#trk').textContent = trackOn?'追従オン':'体を追従'; }
-$('#trk').addEventListener('click',()=>{
-  trackOn=!trackOn; slowCount=0; updTrackBtn();
-  if(trackOn && !pose){ setChip('追従の準備中…'); loadPose(); }
-  if(!trackOn){ state.cx=0.5; state.hw=0.22; state.found=false; setChip('画面の中央を細くしています'); }
-});
 $('#go').addEventListener('click',async()=>{
   try{
-    const s = await navigator.mediaDevices.getUserMedia({video: isMobile ? {width:{ideal:640},height:{ideal:480},facingMode:'user'} : {width:{ideal:1280},height:{ideal:720},facingMode:'user'}, audio:false});
+    const s = await navigator.mediaDevices.getUserMedia({audio:false, video: isMobile
+      ? {width:{ideal:720},height:{ideal:960},facingMode:'user'}
+      : {width:{ideal:1280},height:{ideal:720},facingMode:'user'}});
     video.srcObject = s; await video.play();
-    $('#start').hidden=true; $('#bar').hidden=false; $('#tag').hidden=false;
-    updTrackBtn();
+    $('#start').hidden=true; $('#bar').hidden=false;
+    setChip('顔の検出を準備中…');
     requestAnimationFrame(frame);
-    if(trackOn){ setChip('体の位置を探しています…'); setTimeout(loadPose, 300); }
-    else setChip('画面の中央を細くしています（体を画面の真ん中に）');
+    setTimeout(loadFace, 200);
   }catch(e){
-    $('#err').textContent = 'カメラを開けませんでした。ブラウザのアドレスバー横のカメラ許可を確認して、もう一度押してください。（'+e.name+'）';
+    $('#err').textContent = 'カメラを開けませんでした。カメラの許可を確認して、もう一度押してください。（'+e.name+'）';
   }
 });
 </script>
